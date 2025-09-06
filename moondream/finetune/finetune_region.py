@@ -19,13 +19,12 @@ from ..torch.region import (
     encode_size,
 )
 
-
+from .Roboflow import download_dataset, RoboflowDataset
 # This is a intended to be a basic starting point. Your optimal hyperparams and data may be different.
 MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
 LR = 1e-5
-EPOCHS = 1
-GRAD_ACCUM_STEPS = 128
-
+EPOCHS = 200
+GRAD_ACCUM_STEPS = 10
 
 def lr_schedule(step, max_steps):
     x = step / max_steps
@@ -129,12 +128,21 @@ def main():
         eps=1e-6,
     )
 
-    dataset = WasteDetection()
-
+    # dataset = WasteDetection()
+    
+    ds = download_dataset("4BDHggHM6vkVOoK3g0s3", "objectdetvlm", "water-meter-jbktv-7vz5k-fsod-ftoz-qii9s", 1)
+    datasets = {
+        "train": RoboflowDataset(ds.location,"train"),
+        "val": RoboflowDataset(ds.location,"valid"),
+        "test": RoboflowDataset(ds.location,"test"),
+    }
+    dataset = datasets['train']
+    
     total_steps = EPOCHS * len(dataset) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)
 
     i = 0
+    #### Training
     for epoch in range(EPOCHS):
         for sample in dataset:
             i += 1
@@ -153,13 +161,15 @@ def main():
                     ),
                     model.text,
                 )
-
-            boxes_by_class = {}
-            for box, cls in zip(sample["boxes"], sample["class_names"]):
-                boxes_by_class.setdefault(cls, []).append(box)
-
+            
+            # boxes_by_class = {}
+            # for box, cls in zip(sample["boxes"], sample["class_names"]):
+            #     boxes_by_class.setdefault(cls, []).append(box)
+            
             total_loss = 0.0
+            boxes_by_class = sample['class_to_bbox']
             for class_name, boxes_list in boxes_by_class.items():
+            # for class_name, boxes_list in sample['class_to_bbox'].items():
                 with torch.no_grad():
                     instruction = f"\n\nDetect: {class_name}\n\n"
                     instruction_tokens = model.tokenizer.encode(instruction).ids
@@ -247,6 +257,8 @@ def main():
                         "lr": optimizer.param_groups[0]["lr"],
                     }
                 )
+
+
     wandb.finish()
 
     # Replace with your desired output location.
