@@ -56,4 +56,5 @@ class RoboflowDataset(Dataset):
             "image": image,
             "class_to_bbox": class_id_to_bbox,
             "filename": filename,
+            'size': (w,h),
         }

@@ -20,6 +20,8 @@ from ..torch.region import (
 )
 
 from .Roboflow import download_dataset, RoboflowDataset
+from .mAP import per_object_mAP
+
 # This is a intended to be a basic starting point. Your optimal hyperparams and data may be different.
 MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
 LR = 1e-5
@@ -101,6 +103,58 @@ class WasteDetection(Dataset):
         }
 
 
+import collections
+def get_metric_summary(dataset_metric, name):
+    class_stats = collections.defaultdict(lambda: {'sum': 0.0, 'count': 0})
+    total_precision_sum = 0.0
+    total_scores_count = 0
+
+    for image_precisions in dataset_metric :
+        for class_id, precision in image_precisions.items():
+            class_stats[class_id]['sum'] += precision
+            class_stats[class_id]['count'] += 1
+            total_precision_sum += precision
+            total_scores_count += 1
+
+    mean_average_precision = total_precision_sum / total_scores_count if total_scores_count > 0 else 0
+    print(f"{name}: {mean_average_precision:.4f} \n")
+
+    avg_class_precision = {}
+    for class_id in sorted(class_stats.keys()):
+        stats = class_stats[class_id]
+        average = stats['sum'] / stats['count'] if stats['count'] > 0 else 0
+        avg_class_precision[class_id] = average
+        print(f"{class_id}: {average:.4f} ({stats['count']} counts)")
+
+@torch.no_grad()
+def eval_obj_det(model, val_dataset):
+    model.eval()
+    AP_avg = [] #image_idx --> AP
+    AP_50 = []
+    
+    for sample in val_dataset:
+        AP_avg_dict = {}
+        AP_50_dict= {}
+        for class_name, boxes_list in sample['class_to_bbox'].items():
+            instruction = f"\n\nDetect: {class_name}\n\n"
+            out = model.detect(sample['image'], instruction)['objects']
+            #mAP
+            metadata = {
+                "size" : sample['size'],
+                "prompt": instruction,
+                'filename': sample['filename'],
+            }
+            metrics = per_object_mAP([_.tolist() for _ in boxes_list], [list(_.values()) for _ in out], metadata)
+            AP_50_dict.update({class_name:float(metrics['AP_50'])})
+            AP_avg_dict.update({class_name:float(metrics['AP_avg'])})
+        
+        AP_avg.append(AP_avg_dict)
+        AP_50.append(AP_50_dict)
+
+    get_metric_summary(AP_avg, 'AP (0.50:0.95)')
+    get_metric_summary(AP_50, 'AP (0.50)')
+    model.train()
+
 def main():
     if torch.cuda.is_available():
         torch.set_default_device("cuda")
@@ -138,6 +192,9 @@ def main():
     }
     dataset = datasets['train']
     
+    # init evals
+    eval_obj_det(model, datasets['val'])
+    
     total_steps = EPOCHS * len(dataset) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)
 
@@ -146,7 +203,6 @@ def main():
     for epoch in range(EPOCHS):
         for sample in dataset:
             i += 1
-
             with torch.no_grad():
                 img_emb = model._run_vision_encoder(sample["image"])
                 bos_emb = text_encoder(
@@ -257,8 +313,10 @@ def main():
                         "lr": optimizer.param_groups[0]["lr"],
                     }
                 )
-
-
+    
+        if (epoch+1) % 10 == 0:
+            eval_obj_det(model, datasets['val'])
+    
     wandb.finish()
 
     # Replace with your desired output location.
