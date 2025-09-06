@@ -8,3 +8,6 @@ dist
 clients/python/moondream/torch
 wandb/
 moondream_finetune.safetensors
+.vscode/
+models/
+

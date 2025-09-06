@@ -21,7 +21,7 @@ from ..torch.region import (
 
 
 # This is a intended to be a basic starting point. Your optimal hyperparams and data may be different.
-MODEL_PATH = ""
+MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
 LR = 1e-5
 EPOCHS = 1
 GRAD_ACCUM_STEPS = 128
@@ -176,9 +176,9 @@ def main():
                     l_cs = len(cs_emb)
                     cs_emb.extend(
                         [
-                            encode_coordinate(bb[0].unsqueeze(0), model.region),
-                            encode_coordinate(bb[1].unsqueeze(0), model.region),
-                            encode_size(bb[2:4], model.region),
+                        encode_coordinate(bb[0].to(model.region.coord_features.dtype).unsqueeze(0), model.region),
+                        encode_coordinate(bb[1].to(model.region.coord_features.dtype).unsqueeze(0), model.region),
+                        encode_size(bb[2:4].to(model.region.coord_features.dtype).unsqueeze(0), model.region).squeeze(0),
                         ]
                     )
                     c_idx.extend([l_cs, l_cs + 1])
