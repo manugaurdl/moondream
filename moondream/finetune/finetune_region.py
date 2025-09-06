@@ -27,7 +27,7 @@ MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
 LR = 1e-5
 EPOCHS = 200
 GRAD_ACCUM_STEPS = 10
-
+STEP = 0 
 def lr_schedule(step, max_steps):
     x = step / max_steps
     if x < 0.1:
@@ -105,6 +105,7 @@ class WasteDetection(Dataset):
 
 import collections
 def get_metric_summary(dataset_metric, name):
+    global STEP
     class_stats = collections.defaultdict(lambda: {'sum': 0.0, 'count': 0})
     total_precision_sum = 0.0
     total_scores_count = 0
@@ -116,18 +117,21 @@ def get_metric_summary(dataset_metric, name):
             total_precision_sum += precision
             total_scores_count += 1
 
-    mean_average_precision = total_precision_sum / total_scores_count if total_scores_count > 0 else 0
-    print(f"{name}: {mean_average_precision:.4f} \n")
-
+    avg_dataset_precision = total_precision_sum / total_scores_count if total_scores_count > 0 else 0
+    # print(f"AVG {name}: {avg_dataset_precision:.4f}")
     avg_class_precision = {}
     for class_id in sorted(class_stats.keys()):
         stats = class_stats[class_id]
         average = stats['sum'] / stats['count'] if stats['count'] > 0 else 0
-        avg_class_precision[class_id] = average
-        print(f"{class_id}: {average:.4f} ({stats['count']} counts)")
-
+        avg_class_precision[f"{name}/{class_id}"] = average
+        # print(f"{class_id}: {average:.4f} ({stats['count']} counts)")
+    # print("\n")
+    avg_class_precision[f"{name}/AVG"] = avg_dataset_precision
+    wandb.log(avg_class_precision, step=STEP)
+    
 @torch.no_grad()
 def eval_obj_det(model, val_dataset):
+    global STEP
     model.eval()
     AP_avg = [] #image_idx --> AP
     AP_50 = []
@@ -138,7 +142,7 @@ def eval_obj_det(model, val_dataset):
         for class_name, boxes_list in sample['class_to_bbox'].items():
             instruction = f"\n\nDetect: {class_name}\n\n"
             out = model.detect(sample['image'], instruction)['objects']
-            #mAP
+            ######## TO DO --> plot 5-10 outputs
             metadata = {
                 "size" : sample['size'],
                 "prompt": instruction,
@@ -156,6 +160,7 @@ def eval_obj_det(model, val_dataset):
     model.train()
 
 def main():
+    global STEP
     if torch.cuda.is_available():
         torch.set_default_device("cuda")
     elif torch.backends.mps.is_available():
@@ -197,12 +202,12 @@ def main():
     
     total_steps = EPOCHS * len(dataset) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)
-
-    i = 0
+    i=0
     #### Training
     for epoch in range(EPOCHS):
         for sample in dataset:
-            i += 1
+            i+=1
+            STEP+=1
             with torch.no_grad():
                 img_emb = model._run_vision_encoder(sample["image"])
                 bos_emb = text_encoder(
@@ -311,7 +316,7 @@ def main():
                     {
                         "loss/train": total_loss.item(),
                         "lr": optimizer.param_groups[0]["lr"],
-                    }
+                    }, step=STEP
                 )
     
         if (epoch+1) % 10 == 0:
