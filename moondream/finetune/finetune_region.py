@@ -217,7 +217,7 @@ def main():
     }
     loaders = get_loaders(datasets, BATCH_SIZE, NUM_WORKERS)    
     # init evals
-    eval_obj_det(model, loaders['val'])
+    # eval_obj_det(model, loaders['val'])
     
     total_steps = EPOCHS * len(loaders['train']) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)

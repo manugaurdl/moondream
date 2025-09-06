@@ -8,12 +8,50 @@ from collections import defaultdict
 import random
 import torch
 import torchvision.transforms as T
+import torchvision.transforms.functional as TF
 
 def train_transform():
     return T.Compose([
         T.RandomApply([T.ColorJitter(brightness=.5, hue=.4)], p=0.7),
         T.RandomGrayscale(p=0.4),
     ])
+
+
+def transform_bbox(bbox, transform):
+    x1,y1,x2,y2 = bbox
+    if transform=="hflip":
+        x1_new = 1 - x2
+        x2_new = 1 - x1
+        y1_new = y1
+        y2_new = y2
+    elif transform=="vflip":
+        y1_new = 1 - y2
+        y2_new = 1 - y1
+        x1_new = x1
+        x2_new = x2
+    else:
+        raise Error("invalid input transform for bbox")
+    
+    return [x1_new,y1_new,x2_new,y2_new]
+
+def GeometricTransform(image, class_id_to_bbox, pflip=0.2, protate=0):    
+
+    ## Random horizontal flipping
+    if random.random() < pflip:
+        image = TF.hflip(image)
+        class_id_to_bbox = {class_id : [transform_bbox(bbox,'hflip') for bbox in bbox_list] for class_id, bbox_list in class_id_to_bbox.items()}
+
+    ## Random vertical flipping
+    if random.random() < pflip:
+        image = TF.vflip(image)
+        class_id_to_bbox = {class_id : [transform_bbox(bbox,'vflip') for bbox in bbox_list] for class_id, bbox_list in class_id_to_bbox.items()}
+
+    # # Random rotation
+    # if random.random() < protate:
+    #     angle = random.randint(-180, 179)
+    #     image = TF.rotate(image, angle)
+
+    return image, class_id_to_bbox
 
 def download_dataset(api_key, workspace, project_name, version_num):
     rf = Roboflow(api_key=api_key)
@@ -31,7 +69,8 @@ class RoboflowDataset(Dataset):
             f"{dataset_path}/{split}/_annotations.coco.json"
         )
         self.dataset = sv_dataset
-        self.transform = train_transform() if split =="train" else None
+        self.split = split
+        self.transform = train_transform() if self.split =="train" else None
 
     def __len__(self):
         return len(self.dataset)
@@ -40,17 +79,15 @@ class RoboflowDataset(Dataset):
 
         filename, image, ann = self.dataset[idx] #ann.__class__ :supervision.detection.core.Detections        
         image = Image.fromarray(image)
-        if self.transform:
-            image = self.transform(image)
         w,h = image.size
         target = ann.xyxy
         norm_target = []
         
         for x1,y1,x2,y2 in target:
-            x1 = x1/w
-            x2 = x2/w
-            y1 = y1/h
-            y2 = y2/h
+            x1 = float(x1/w)
+            x2 = float(x2/w)
+            y1 = float(y1/h)
+            y2 = float(y2/h)
             norm_target.append([x1,y1,x2,y2])
         
         class_id = ann.class_id
@@ -58,12 +95,16 @@ class RoboflowDataset(Dataset):
         
         class_id_to_bbox = {}
         for obj_class, bbox in zip(class_id, norm_target):
-            class_id_to_bbox.setdefault(int(obj_class)-1, []).append(torch.tensor(bbox))
+            class_id_to_bbox.setdefault(int(obj_class)-1, []).append(bbox)
+
+        if self.transform:
+            image, class_id_to_bbox = GeometricTransform(image, class_id_to_bbox)
+            # image = self.transform(image)
 
         # class_id = random.sample(list(class_id_to_bbox.keys()), 1)[0]
         return {
             "image": image,
-            "class_to_bbox": class_id_to_bbox,
+            "class_to_bbox": {k: torch.tensor(v) for k,v in class_id_to_bbox.items()},
             "filename": filename,
             'size': (w,h),
         }
@@ -123,46 +164,4 @@ def eval_transform(img_res):
         T.Lambda(img2rgb),
         T.ToTensor(),
         T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-    ])
-
-    
-def GeometricTransform(image, heatmap, img_res, pflip=0.2, protate=0):
-    og_heatmap_size = heatmap.size(-1)
-    
-    # Resize
-    resize = T.Resize(size=(img_res, img_res), interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True)
-    image = resize(image)
-    # heatmap = resize(heatmap)
-
-    # # Random crops
-    # i, j, h, w = T.RandomCrop.get_params(
-    #     image, output_size=(512, 512))
-    # image = TF.crop(image, i, j, h, w)
-    # heatmap = TF.crop(heatmap, i, j, h, w)
-
-    ## Random horizontal flipping
-    if random.random() < pflip:
-        image = TF.hflip(image)
-        heatmap = TF.hflip(heatmap)
-
-    ## Random vertical flipping
-    if random.random() < pflip:
-        image = TF.vflip(image)
-        heatmap = TF.vflip(heatmap)
-
-    ## Random rotation
-    # if random.random() < protate:
-    #     angle = random.randint(-180, 179)
-    #     image = TF.rotate(image, angle)
-    #     heatmap = TF.rotate(heatmap, angle)
-
-    return image, heatmap.flatten() #, T.Resize(size=(og_heatmap_size, og_heatmap_size), interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True)(heatmap).squeeze(0).flatten()
-
-def train_transform():
-    return T.Compose([
-        T.RandomApply([T.ColorJitter(brightness=.5, hue=.3)], p=0.7),
-        T.RandomGrayscale(p=0.1),
-        # T.Lambda(img2rgb),
-        # T.ToTensor(),
-        # T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
     ])
