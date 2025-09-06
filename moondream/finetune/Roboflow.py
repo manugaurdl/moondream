@@ -12,8 +12,8 @@ import torchvision.transforms.functional as TF
 
 def train_transform():
     return T.Compose([
-        T.RandomApply([T.ColorJitter(brightness=.5, hue=.4)], p=0.7),
-        T.RandomGrayscale(p=0.4),
+        T.RandomApply([T.ColorJitter(brightness=.5, hue=.3)], p=0.7),
+        T.RandomGrayscale(p=0.1),
     ])
 
 
@@ -99,7 +99,7 @@ class RoboflowDataset(Dataset):
 
         if self.transform:
             image, class_id_to_bbox = GeometricTransform(image, class_id_to_bbox)
-            # image = self.transform(image)
+            image = self.transform(image)
 
         # class_id = random.sample(list(class_id_to_bbox.keys()), 1)[0]
         return {
