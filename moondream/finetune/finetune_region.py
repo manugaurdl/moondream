@@ -27,7 +27,9 @@ MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
 LR = 1e-5
 EPOCHS = 200
 GRAD_ACCUM_STEPS = 10
-STEP = 0 
+STEP = 0
+SAVE_METRIC = 0 #temp
+
 def lr_schedule(step, max_steps):
     x = step / max_steps
     if x < 0.1:
@@ -128,10 +130,12 @@ def get_metric_summary(dataset_metric, name):
     # print("\n")
     avg_class_precision[f"{name}/AVG"] = avg_dataset_precision
     wandb.log(avg_class_precision, step=STEP)
+    return avg_dataset_precision
     
 @torch.no_grad()
 def eval_obj_det(model, val_dataset):
     global STEP
+    global SAVE_METRIC
     model.eval()
     AP_avg = [] #image_idx --> AP
     AP_50 = []
@@ -155,8 +159,15 @@ def eval_obj_det(model, val_dataset):
         AP_avg.append(AP_avg_dict)
         AP_50.append(AP_50_dict)
 
-    get_metric_summary(AP_avg, 'AP (0.50:0.95)')
-    get_metric_summary(AP_50, 'AP (0.50)')
+    _ = get_metric_summary(AP_avg, 'AP (0.50:0.95)')
+    avg_AP_50 = get_metric_summary(AP_50, 'AP (0.50)')
+    if avg_AP_50 > SAVE_METRIC:
+        SAVE_METRIC = avg_AP_50
+        save_file(
+        model.state_dict(),
+        "checkpoints/moondream_finetune.safetensors",
+        )
+
     model.train()
 
 def main():
