@@ -75,7 +75,7 @@ def cocoeval_AP(cocoGt, cocoDt, image_id):
             cocoEval.evaluate()
             cocoEval.accumulate()
             cocoEval.summarize()
-    return cocoEval.stats[:6]
+    return cocoEval.stats[:9]
 
 def per_object_mAP(gt_bboxes, pred_bboxes, metadata):
     width, height = metadata['size']
@@ -94,11 +94,11 @@ def per_object_mAP(gt_bboxes, pred_bboxes, metadata):
                 cocoGt = COCO(gt_path)
                 cocoDt = cocoGt.loadRes(det_path)
     
-    AP_avg, AP_50, AP_75, AP_small, AP_medium, AP_large = cocoeval_AP(cocoGt, cocoDt, image_id)
+    AP, AP_50, AP_75, AP_small, AP_medium, AP_large, AR_1, AR_10, AR_100 = cocoeval_AP(cocoGt, cocoDt, image_id)
     # print("AP (0.50:0.95) = {:.4f}".format(AP_avg))
     # print("AP @ IoU=0.50 = {:.4f}".format(AP_50))
     # print("AP @ IoU=0.75 = {:.4f}".format(AP_75))
     # print(f"AP (small) = {AP_small}")
     # print(f"AP (medium) = {AP_medium}")
     # print(f"AP (large) = {AP_large}")
-    return dict(zip(["AP_avg", "AP_50", "AP_75", "AP_small", "AP_medium", "AP_large"], [AP_avg, AP_50, AP_75, AP_small, AP_medium, AP_large]))
+    return dict(zip(["AP", "AP_50", "AP_75", "AP_small", "AP_medium", "AP_large", "AR_100"], [AP, AP_50, AP_75, AP_small, AP_medium, AP_large, AR_100]))
