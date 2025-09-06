@@ -19,11 +19,13 @@ from ..torch.region import (
     encode_size,
 )
 
-from .Roboflow import download_dataset, RoboflowDataset
+from .Roboflow import download_dataset, RoboflowDataset, get_loaders
 from .mAP import per_object_mAP
 
 # This is a intended to be a basic starting point. Your optimal hyperparams and data may be different.
 MODEL_PATH = "/home/manugaur/moondream/models/model.safetensors"
+BATCH_SIZE = 1
+NUM_WORKERS=0
 LR = 1e-5
 EPOCHS = 200
 GRAD_ACCUM_STEPS = 10
@@ -134,7 +136,7 @@ def get_metric_summary(dataset_metric, name):
     return avg_dataset_precision
     
 @torch.no_grad()
-def eval_obj_det(model, val_dataset):
+def eval_obj_det(model, loader):
     global STEP
     global SAVE_METRIC
     model.eval()
@@ -142,7 +144,7 @@ def eval_obj_det(model, val_dataset):
     AP_50 = []
     AR_100 = []
     
-    for sample in val_dataset:
+    for batch_idx, sample in enumerate(loader):
         AP_dict = {}
         AP_50_dict= {}
         AR_100_dict= {}
@@ -213,17 +215,16 @@ def main():
         "val": RoboflowDataset(ds.location,"valid"),
         "test": RoboflowDataset(ds.location,"test"),
     }
-    dataset = datasets['train']
-    
+    loaders = get_loaders(datasets, BATCH_SIZE, NUM_WORKERS)    
     # init evals
-    eval_obj_det(model, datasets['val'])
+    eval_obj_det(model, loaders['val'])
     
-    total_steps = EPOCHS * len(dataset) // GRAD_ACCUM_STEPS
+    total_steps = EPOCHS * len(loaders['train']) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)
     i=0
     #### Training
     for epoch in range(EPOCHS):
-        for sample in dataset:
+        for batch_idx, sample in enumerate(loaders['train']):
             i+=1
             STEP+=1
             with torch.no_grad():

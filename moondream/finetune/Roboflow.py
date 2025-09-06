@@ -1,5 +1,5 @@
 from roboflow import Roboflow
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 import json
 from PIL import Image
 import supervision as sv
@@ -58,3 +58,50 @@ class RoboflowDataset(Dataset):
             "filename": filename,
             'size': (w,h),
         }
+
+
+def custom_collate(batch):
+
+    # image = [item['image'] for item in batch]
+    # filename = [item['filename'] for item in batch]
+    # class_to_bbox = [item['class_to_bbox'] for item in batch]
+    
+    data = {
+        'image': batch[0]['image'],
+        'filename': batch[0]['filename'],
+        'size': batch[0]['size'],
+        'class_to_bbox': batch[0]['class_to_bbox'],
+    }
+    return data
+
+
+
+def get_loaders(datasets, BATCH_SIZE, NUM_WORKERS):
+    
+    train_loader = DataLoader(
+        datasets['train'], 
+        batch_size=BATCH_SIZE, 
+        shuffle=True,
+        generator=torch.Generator(device='cuda'),
+        num_workers=NUM_WORKERS,
+        collate_fn = custom_collate,
+        # pin_memory=True, # for faster data transfer to GPU
+        # drop_last=True, # consistent batch sizes across GPUs
+    )    
+
+    val_loader = DataLoader(
+        datasets['val'], 
+        batch_size=BATCH_SIZE, 
+        shuffle=False,
+        collate_fn = custom_collate,
+        num_workers=NUM_WORKERS, 
+    )
+    
+    test_loader = DataLoader(
+        datasets['test'], 
+        batch_size=BATCH_SIZE, 
+        shuffle=False,
+        collate_fn = custom_collate,
+        num_workers=NUM_WORKERS,
+    )
+    return {"train": train_loader, "val": val_loader, "test": test_loader}
