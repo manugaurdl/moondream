@@ -29,6 +29,7 @@ EPOCHS = 200
 GRAD_ACCUM_STEPS = 10
 STEP = 0
 SAVE_METRIC = 0 #temp
+CKPT_NAME = ""
 
 def lr_schedule(step, max_steps):
     x = step / max_steps
@@ -159,7 +160,7 @@ def eval_obj_det(model, val_dataset):
             AR_100_dict.update({class_name:float(metrics['AR_100'])})
             AP_dict.update({class_name:float(metrics['AP'])})
         
-        AP.append(AP_avg_dict)
+        AP.append(AP_dict)
         AP_50.append(AP_50_dict)
         AR_100.append(AR_100_dict)
 
@@ -171,7 +172,7 @@ def eval_obj_det(model, val_dataset):
     #     SAVE_METRIC = avg_AP_50
     #     save_file(
     #     model.state_dict(),
-    #     "checkpoints/moondream_finetune.safetensors",
+    #     f"checkpoints/{CKPT_NAME}.safetensors",
     #     )
 
     model.train()
@@ -343,7 +344,7 @@ def main():
 
 if __name__ == "__main__":
     """
-    Replace paths with your appropriate paths.
-    To run: python -m moondream.finetune.finetune_region
+    To do:
+    config/parser - ckpt_name
     """
     main()
