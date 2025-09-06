@@ -7,6 +7,13 @@ import numpy as np
 from collections import defaultdict
 import random
 import torch
+import torchvision.transforms as T
+
+def train_transform():
+    return T.Compose([
+        T.RandomApply([T.ColorJitter(brightness=.5, hue=.4)], p=0.7),
+        T.RandomGrayscale(p=0.4),
+    ])
 
 def download_dataset(api_key, workspace, project_name, version_num):
     rf = Roboflow(api_key=api_key)
@@ -24,7 +31,7 @@ class RoboflowDataset(Dataset):
             f"{dataset_path}/{split}/_annotations.coco.json"
         )
         self.dataset = sv_dataset
-        # self.dataset = self.dataset.shuffle(seed=111)
+        self.transform = train_transform() if split =="train" else None
 
     def __len__(self):
         return len(self.dataset)
@@ -33,6 +40,8 @@ class RoboflowDataset(Dataset):
 
         filename, image, ann = self.dataset[idx] #ann.__class__ :supervision.detection.core.Detections        
         image = Image.fromarray(image)
+        if self.transform:
+            image = self.transform(image)
         w,h = image.size
         target = ann.xyxy
         norm_target = []
@@ -75,7 +84,6 @@ def custom_collate(batch):
     return data
 
 
-
 def get_loaders(datasets, BATCH_SIZE, NUM_WORKERS):
     
     train_loader = DataLoader(
@@ -105,3 +113,56 @@ def get_loaders(datasets, BATCH_SIZE, NUM_WORKERS):
         num_workers=NUM_WORKERS,
     )
     return {"train": train_loader, "val": val_loader, "test": test_loader}
+
+
+################   Augmentations   ################
+
+def eval_transform(img_res):
+    return T.Compose([
+        T.Resize(size=(img_res, img_res), interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True),
+        T.Lambda(img2rgb),
+        T.ToTensor(),
+        T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    ])
+
+    
+def GeometricTransform(image, heatmap, img_res, pflip=0.2, protate=0):
+    og_heatmap_size = heatmap.size(-1)
+    
+    # Resize
+    resize = T.Resize(size=(img_res, img_res), interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True)
+    image = resize(image)
+    # heatmap = resize(heatmap)
+
+    # # Random crops
+    # i, j, h, w = T.RandomCrop.get_params(
+    #     image, output_size=(512, 512))
+    # image = TF.crop(image, i, j, h, w)
+    # heatmap = TF.crop(heatmap, i, j, h, w)
+
+    ## Random horizontal flipping
+    if random.random() < pflip:
+        image = TF.hflip(image)
+        heatmap = TF.hflip(heatmap)
+
+    ## Random vertical flipping
+    if random.random() < pflip:
+        image = TF.vflip(image)
+        heatmap = TF.vflip(heatmap)
+
+    ## Random rotation
+    # if random.random() < protate:
+    #     angle = random.randint(-180, 179)
+    #     image = TF.rotate(image, angle)
+    #     heatmap = TF.rotate(heatmap, angle)
+
+    return image, heatmap.flatten() #, T.Resize(size=(og_heatmap_size, og_heatmap_size), interpolation=T.InterpolationMode.BICUBIC, max_size=None, antialias=True)(heatmap).squeeze(0).flatten()
+
+def train_transform():
+    return T.Compose([
+        T.RandomApply([T.ColorJitter(brightness=.5, hue=.3)], p=0.7),
+        T.RandomGrayscale(p=0.1),
+        # T.Lambda(img2rgb),
+        # T.ToTensor(),
+        # T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    ])
