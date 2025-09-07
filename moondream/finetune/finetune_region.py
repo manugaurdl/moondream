@@ -32,6 +32,7 @@ GRAD_ACCUM_STEPS = 10
 STEP = 0
 SAVE_METRIC = 0 #temp
 CKPT_NAME = ""
+WANDB = True
 
 def lr_schedule(step, max_steps):
     x = step / max_steps
@@ -132,7 +133,8 @@ def get_metric_summary(dataset_metric, name):
         # print(f"{class_id}: {average:.4f} ({stats['count']} counts)")
     # print("\n")
     avg_class_precision[f"{name}/AVG"] = avg_dataset_precision
-    wandb.log(avg_class_precision, step=STEP)
+    if wandb.run:
+        wandb.log(avg_class_precision, step=STEP)
     return avg_dataset_precision
     
 @torch.no_grad()
@@ -185,19 +187,23 @@ def main():
         torch.set_default_device("cuda")
     elif torch.backends.mps.is_available():
         torch.set_default_device("mps")
-
-    wandb.init(
-        project="moondream-ft",
-        config={
-            "EPOCHS": EPOCHS,
-            "GRAD_ACCUM_STEPS": GRAD_ACCUM_STEPS,
-            "LR": LR,
-        },
-    )
+    if WANDB:
+        wandb.init(
+            project="moondream-ft",
+            config={
+                "EPOCHS": EPOCHS,
+                "GRAD_ACCUM_STEPS": GRAD_ACCUM_STEPS,
+                "LR": LR,
+            },
+        )
 
     config = MoondreamConfig()
     model = MoondreamModel(config)
     load_weights_into_model(MODEL_PATH, model)
+    
+    for name, p in model.named_parameters():
+        if 'region' not in name:
+            p.requires_grad = False
 
     # If you are struggling with GPU memory, try AdamW8Bit
     optimizer = AdamW(
@@ -331,12 +337,13 @@ def main():
                     {"step": i // GRAD_ACCUM_STEPS, "loss": total_loss.item()}
                 )
                 pbar.update(1)
-                wandb.log(
-                    {
-                        "loss/train": total_loss.item(),
-                        "lr": optimizer.param_groups[0]["lr"],
-                    }, step=STEP
-                )
+                if wandb.run:
+                    wandb.log(
+                        {
+                            "loss/train": total_loss.item(),
+                            "lr": optimizer.param_groups[0]["lr"],
+                        }, step=STEP
+                    )
     
         if (epoch+1) % 10 == 0:
             eval_obj_det(model, datasets['val'])
