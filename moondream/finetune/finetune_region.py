@@ -32,7 +32,7 @@ GRAD_ACCUM_STEPS = 10
 GRAD_CLIP = 1000
 STEP = 0
 SAVE_METRIC = 0 #temp
-CKPT_NAME = ""
+CKPT_NAME = "yolo_run"
 WANDB = True
 
 def lr_schedule(step, max_steps):
@@ -173,12 +173,12 @@ def eval_obj_det(model, loader):
     avg_AP_50 = get_metric_summary(AP_50, 'AP (0.50)')
     avg_AR_100 = get_metric_summary(AR_100, 'AR (0.50:0.95) | 100 Det')
     
-    # if avg_AP_50 > SAVE_METRIC:
-    #     SAVE_METRIC = avg_AP_50
-    #     save_file(
-    #     model.state_dict(),
-    #     f"checkpoints/{CKPT_NAME}.safetensors",
-    #     )
+    if avg_AP_50 > SAVE_METRIC:
+        SAVE_METRIC = avg_AP_50
+        save_file(
+        model.state_dict(),
+        f"checkpoints/{CKPT_NAME}.safetensors",
+        )
 
     model.train()
 

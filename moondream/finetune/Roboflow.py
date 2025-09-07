@@ -12,8 +12,9 @@ import torchvision.transforms.functional as TF
 
 def train_transform():
     return T.Compose([
-        T.RandomApply([T.ColorJitter(brightness=.5, hue=.5)], p=0.7),
-        T.RandomGrayscale(p=0.4),
+        T.RandomApply([T.ColorJitter(brightness=.5, contrast=.3, saturation=.5, hue=.5)], p=0.5),
+        T.RandomGrayscale(p=0.3),
+        T.RandomSolarize(threshold=192.0, p=0.3),
     ])
 
 
@@ -34,7 +35,7 @@ def transform_bbox(bbox, transform):
     
     return [x1_new,y1_new,x2_new,y2_new]
 
-def GeometricTransform(image, class_id_to_bbox, pflip=0.2, protate=0):    
+def GeometricTransform(image, class_id_to_bbox, pflip=0.3, protate=0, pblur=0.2):    
 
     ## Random horizontal flipping
     if random.random() < pflip:
@@ -45,6 +46,9 @@ def GeometricTransform(image, class_id_to_bbox, pflip=0.2, protate=0):
     if random.random() < pflip:
         image = TF.vflip(image)
         class_id_to_bbox = {class_id : [transform_bbox(bbox,'vflip') for bbox in bbox_list] for class_id, bbox_list in class_id_to_bbox.items()}
+    
+    if random.random()< pblur:
+        TF.gaussian_blur(image, kernel_size=[5,9], sigma=[0.1])
 
     # # Random rotation
     # if random.random() < protate:
