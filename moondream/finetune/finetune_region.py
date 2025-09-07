@@ -226,6 +226,7 @@ def main():
     # init evals
     eval_obj_det(model, loaders['val'])
     
+    total_loss = 0.0
     total_steps = EPOCHS * len(loaders['train']) // GRAD_ACCUM_STEPS
     pbar = tqdm(total=total_steps)
     i=0
@@ -253,7 +254,7 @@ def main():
             # for box, cls in zip(sample["boxes"], sample["class_names"]):
             #     boxes_by_class.setdefault(cls, []).append(box)
             
-            total_loss = 0.0
+            image_loss = 0.0
             boxes_by_class = sample['class_to_bbox']
             for class_name, boxes_list in boxes_by_class.items():
             # for class_name, boxes_list in sample['class_to_bbox'].items():
@@ -323,14 +324,16 @@ def main():
                     c_idx=c_idx,
                     s_idx=s_idx,
                 )
-                total_loss += loss
-
-            total_loss.backward()
-
-            if i % GRAD_ACCUM_STEPS == 0:
+                image_loss += loss
+            
+            total_loss += image_loss
+            if (i+1) % GRAD_ACCUM_STEPS == 0:
+                total_loss /= GRAD_ACCUM_STEPS
+                total_loss.backward()    
                 grad_norm = torch.nn.utils.clip_grad_norm_(model.region.parameters(), max_norm = GRAD_CLIP)
                 optimizer.step()
                 optimizer.zero_grad()
+
 
                 lr_val = lr_schedule(i / GRAD_ACCUM_STEPS, total_steps)
                 for param_group in optimizer.param_groups:
@@ -347,6 +350,7 @@ def main():
                             'trainer/grad_norm': grad_norm,
                         }, step=STEP
                     )
+                total_loss = 0.0
     
         if (epoch+1) % 10 == 0:
             eval_obj_det(model, datasets['val'])
