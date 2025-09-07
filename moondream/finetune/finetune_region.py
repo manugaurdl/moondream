@@ -29,6 +29,7 @@ NUM_WORKERS=0
 LR = 1e-5
 EPOCHS = 200
 GRAD_ACCUM_STEPS = 10
+GRAD_CLIP = 1000
 STEP = 0
 SAVE_METRIC = 0 #temp
 CKPT_NAME = ""
@@ -327,6 +328,7 @@ def main():
             total_loss.backward()
 
             if i % GRAD_ACCUM_STEPS == 0:
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.region.parameters(), max_norm = GRAD_CLIP)
                 optimizer.step()
                 optimizer.zero_grad()
 
@@ -341,7 +343,8 @@ def main():
                     wandb.log(
                         {
                             "loss/train": total_loss.item(),
-                            "lr": optimizer.param_groups[0]["lr"],
+                            "trainer/lr": optimizer.param_groups[0]["lr"],
+                            'trainer/grad_norm': grad_norm,
                         }, step=STEP
                     )
     
